@@ -9,9 +9,12 @@ services:
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SERVE_CONFIG=/config/serve.json
       - TS_USERSPACE=true
+      - TS_EXTRA_ARGS=--accept-dns=false
     volumes:
       - ./tailscale-state:/var/lib/tailscale
       - ./serve.json:/config/serve.json:ro
+    networks:
+      - gateway-net
     restart: unless-stopped
 
   # ─── Go Gateway (API layer) ───
@@ -36,8 +39,8 @@ services:
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: ai-gateway-llama
-    ports:
-      - "8081:8081"
+    networks:
+      - gateway-net
     volumes:
       - ./models:/models:ro
     environment:
@@ -49,3 +52,7 @@ services:
       - LLAMA_ARG_CTX_SIZE=${LLAMA_CTX_SIZE:-4096}
       - LLAMA_ARG_N_GPU_LAYERS=${LLAMA_GPU_LAYERS:-0}
     restart: unless-stopped
+
+networks:
+  gateway-net:
+    driver: bridge
