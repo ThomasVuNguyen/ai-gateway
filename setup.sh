@@ -110,22 +110,78 @@ else
     docker compose up -d --build
 fi
 
+# ─── Wait for Tailscale to connect and get the public URL ───
+echo ""
+echo -e "${CYAN}Waiting for Tailscale to connect...${NC}"
+
+PUBLIC_URL=""
+for i in $(seq 1 30); do
+    # Try to get the funnel status
+    FUNNEL_OUTPUT=$(docker exec ai-gateway-tailscale tailscale funnel status 2>/dev/null || true)
+    
+    # Extract the https URL from funnel output
+    URL=$(echo "$FUNNEL_OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.ts\.net' | head -1 || true)
+    
+    if [ -n "$URL" ]; then
+        PUBLIC_URL="$URL"
+        break
+    fi
+    
+    # Also try tailscale status to get the machine name
+    if [ -z "$PUBLIC_URL" ]; then
+        TS_STATUS=$(docker exec ai-gateway-tailscale tailscale status --self 2>/dev/null || true)
+        TS_NAME=$(echo "$TS_STATUS" | awk '{print $2}' | head -1 || true)
+        if [ -n "$TS_NAME" ] && [[ "$TS_NAME" == *"."* ]]; then
+            PUBLIC_URL="https://${TS_NAME}"
+            break
+        fi
+    fi
+
+    echo -n "."
+    sleep 2
+done
+echo ""
+
 # ─── Done ───
 echo ""
-echo -e "${GREEN}╔════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║       AI Gateway is running!       ║${NC}"
-echo -e "${GREEN}╚════════════════════════════════════╝${NC}"
+echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║            AI Gateway is running! 🚀                ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "Local:     ${CYAN}http://localhost:8080${NC}"
-echo -e "Health:    ${CYAN}http://localhost:8080/health${NC}"
-echo -e "Hardware:  ${CYAN}http://localhost:8080/v1/hardware${NC}"
+
+if [ -n "$PUBLIC_URL" ]; then
+    echo -e "┌──────────────────────────────────────────────────────┐"
+    echo -e "│                                                      │"
+    echo -e "│  ${GREEN}YOUR PUBLIC ENDPOINT:${NC}                                │"
+    echo -e "│                                                      │"
+    echo -e "│  ${CYAN}${PUBLIC_URL}${NC}"
+    echo -e "│                                                      │"
+    echo -e "└──────────────────────────────────────────────────────┘"
+    echo ""
+    echo -e "  API Base URL:  ${CYAN}${PUBLIC_URL}/v1${NC}"
+    echo -e "  Health Check:  ${CYAN}${PUBLIC_URL}/health${NC}"
+    echo -e "  Hardware:      ${CYAN}${PUBLIC_URL}/v1/hardware${NC}"
+else
+    echo -e "${YELLOW}⚠ Tailscale is still connecting. Run this to get your URL:${NC}"
+    echo -e "  ${CYAN}docker exec ai-gateway-tailscale tailscale funnel status${NC}"
+    echo ""
+    echo -e "  Local:     ${CYAN}http://localhost:8080${NC}"
+    echo -e "  Health:    ${CYAN}http://localhost:8080/health${NC}"
+    echo -e "  Hardware:  ${CYAN}http://localhost:8080/v1/hardware${NC}"
+fi
+
 echo ""
-echo -e "Your API key: ${YELLOW}${user_api_key}${NC}"
+echo -e "  Your API key:  ${YELLOW}${user_api_key}${NC}"
 echo ""
-echo -e "Test it:"
-echo -e "  curl http://localhost:8080/v1/chat/completions \\"
+echo -e "  ${GREEN}Test it:${NC}"
+
+if [ -n "$PUBLIC_URL" ]; then
+    echo -e "  curl ${PUBLIC_URL}/v1/chat/completions \\"
+else
+    echo -e "  curl http://localhost:8080/v1/chat/completions \\"
+fi
 echo -e "    -H 'Authorization: Bearer ${user_api_key}' \\"
 echo -e "    -H 'Content-Type: application/json' \\"
 echo -e "    -d '{\"model\":\"qwen2.5\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello!\"}]}'"
 echo ""
-echo -e "${CYAN}Tailscale URL will appear in 'docker logs ai-gateway-tailscale' once connected.${NC}"
+
