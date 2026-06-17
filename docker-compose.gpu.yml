@@ -1,0 +1,15 @@
+# NVIDIA GPU override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+services:
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - LLAMA_ARG_N_GPU_LAYERS=${LLAMA_GPU_LAYERS:-999}

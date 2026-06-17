@@ -1,0 +1,51 @@
+services:
+  # ─── Tailscale Funnel (internet exposure) ───
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: ai-gateway-tailscale
+    hostname: ${TS_HOSTNAME:-ai-gateway}
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_USERSPACE=true
+    volumes:
+      - ./tailscale-state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    restart: unless-stopped
+
+  # ─── Go Gateway (API layer) ───
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: ai-gateway
+    network_mode: service:tailscale
+    environment:
+      - API_KEY=${API_KEY}
+      - LLAMA_SERVER_URL=http://llama-server:8081
+      - GATEWAY_PORT=8080
+    depends_on:
+      llama-server:
+        condition: service_started
+      tailscale:
+        condition: service_started
+    restart: unless-stopped
+
+  # ─── llama.cpp Server (LLM inference) ───
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: ai-gateway-llama
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./models:/models:ro
+    environment:
+      - LLAMA_ARG_MODEL=/models/${MODEL_FILE:-model.gguf}
+      - LLAMA_ARG_ALIAS=${MODEL_ALIAS:-default}
+      - LLAMA_ARG_HOST=0.0.0.0
+      - LLAMA_ARG_PORT=8081
+      - LLAMA_ARG_THREADS=${LLAMA_THREADS:-4}
+      - LLAMA_ARG_CTX_SIZE=${LLAMA_CTX_SIZE:-4096}
+      - LLAMA_ARG_N_GPU_LAYERS=${LLAMA_GPU_LAYERS:-0}
+    restart: unless-stopped

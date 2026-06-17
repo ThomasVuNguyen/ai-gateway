@@ -1,0 +1,14 @@
+# Environment
+.env
+
+# Models (large GGUF files)
+models/*.gguf
+
+# Tailscale persistent state
+tailscale-state/
+
+# Go build artifacts
+gateway/ai-gateway
+
+# OS
+.DS_Store
